@@ -1,0 +1,61 @@
+const express = require("express");
+-project/backend# curl -X POST http://localhost:3000/signal \
+> -H "Content-Type: application/json" \
+> -d '{"componentId":"CACHE_CLUSTER_01","message":"Latency spike","severity":"P2"}'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot POST /signal</pre>
+</body>
+</html>const rateLimit = require("express-rate-limit");
+
+// 🔥 Import RabbitMQ functions
+const { connectQueue, sendToQueue } = require("./config/rabbitmq");
+
+const app = express();
+app.use(express.json());
+
+// 🔥 Rate limiter (IMPORTANT)
+const limiter = rateLimit({
+  windowMs: 1000,
+  max: 100, // limit per second
+});
+
+app.use(limiter);
+
+// 🔥 Connect to RabbitMQ
+connectQueue();
+
+// Health check
+app.get("/health", (req, res) => {
+  res.send("OK");
+});
+
+// 🔥 NEW: Signal ingestion API
+app.post("/signal", (req, res) => {
+  try {
+    const signal = req.body;
+
+    // Basic validation (good practice)
+    if (!signal.componentId || !signal.message || !signal.severity) {
+      return res.status(400).send("Invalid signal payload");
+    }
+
+    // Send to queue
+    sendToQueue(signal);
+
+    res.status(200).send("Signal queued successfully");
+  } catch (err) {
+    console.error("Error sending signal:", err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+// Start server
+app.listen(3000, "127.0.0.1", () => {
+  console.log("Server running on port 3000");
+});
